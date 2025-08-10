@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control ESP32 - Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+        
+        .connected { background-color: #4CAF50; }
+        .disconnected { background-color: #f44336; }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .card h3 {
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+        
+        .sensor-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .sensor-unit {
+            font-size: 0.8em;
+            color: #666;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+            margin-right: 10px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .servo-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .servo-slider {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+        }
+        
+        .servo-value {
+            min-width: 40px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .log-container {
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.9em;
+        }
+        
+        .timestamp {
+            color: #888;
+            font-size: 0.8em;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ESP32 Dashboard</h1>
+            <p>Estado de conexión: <span id="connection-status">Desconectado</span>
+            <span id="status-indicator" class="status-indicator disconnected"></span></p>
+            <p>Dispositivos conectados: <span id="device-count">0</span></p>
+        </div>
+        
+        <div class="dashboard-grid">
+            <!-- Sensores -->
+            <div class="card">
+                <h3>🌡️ Temperatura</h3>
+                <div class="sensor-value">
+                    <span id="temperature">--</span>
+                    <span class="sensor-unit">°C</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>💧 Humedad</h3>
+                <div class="sensor-value">
+                    <span id="humidity">--</span>
+                    <span class="sensor-unit">%</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>💡 Luz</h3>
+                <div class="sensor-value">
+                    <span id="light">--</span>
+                    <span class="sensor-unit"></span>
+                </div>
+            </div>
+            
+            <!-- Controles -->
+            <div class="card">
+                <h3>🔌 Control de Actuadores</h3>
+                
+                <div class="control-group">
+                    <label class="control-label">LED:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="led-switch">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="led-status">OFF</span>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Relay:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="relay-switch">
+                        <span class="slider"></span>
+                    </label>
+                    <span id="relay-status">OFF</span>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Servo Motor:</label>
+                    <div class="servo-control">
+                        <input type="range" min="0" max="180" value="90" 
+                               class="servo-slider" id="servo-slider">
+                        <span class="servo-value" id="servo-value">90°</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Log de eventos -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3>📋 Log de Eventos</h3>
+                <div class="log-container" id="event-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inicializar Socket.IO
+        const socket = io();
+        
+        // Elementos DOM
+        const connectionStatus = document.getElementById('connection-status');
+        const statusIndicator = document.getElementById('status-indicator');
+        const deviceCount = document.getElementById('device-count');
+        const eventLog = document.getElementById('event-log');
+        
+        // Elementos de sensores
+        const temperatureElement = document.getElementById('temperature');
+        const humidityElement = document.getElementById('humidity');
+        const lightElement = document.getElementById('light');
+        
+        // Elementos de control
+        const ledSwitch = document.getElementById('led-switch');
+        const relaySwitch = document.getElementById('relay-switch');
+        const servoSlider = document.getElementById('servo-slider');
+        const servoValue = document.getElementById('servo-value');
+        
+        // Estados
+        const ledStatus = document.getElementById('led-status');
+        const relayStatus = document.getElementById('relay-status');
+        
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            eventLog.appendChild(logEntry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        // Eventos de conexión
+        socket.on('connect', () => {
+            connectionStatus.textContent = 'Conectado';
+            statusIndicator.className = 'status-indicator connected';
+            addLog('✅ Conectado al servidor', 'success');
+            socket.emit('web_connect');
+        });
+        
+        socket.on('disconnect', () => {
+            connectionStatus.textContent = 'Desconectado';
+            statusIndicator.className = 'status-indicator disconnected';
+            addLog('❌ Desconectado del servidor', 'error');
+        });
+        
+        // Eventos de datos
+        socket.on('initial_data', (data) => {
+            updateSensorData(data.sensors);
+            updateActuatorStates(data.actuators);
+            deviceCount.textContent = data.connected_devices;
+            addLog(`📊 Datos iniciales recibidos - ${data.connected_devices} dispositivos`);
+        });
+        
+        socket.on('sensor_update', (data) => {
+            updateSensorData(data);
+            addLog(`🌡️ Sensores actualizados: ${data.temperature}°C, ${data.humidity}%`);
+        });
+        
+        socket.on('actuator_update', (data) => {
+            updateActuatorStates(data);
+            addLog('🔧 Estados de actuadores actualizados');
+        });
+        
+        socket.on('device_status', (data) => {
+            if (data.type === 'esp32_connected') {
+                deviceCount.textContent = data.total_devices;
+                addLog(`📱 ESP32 conectado: ${data.device_id}`);
+            }
+        });
+        
+        function updateSensorData(data) {
+            if (data.temperature !== undefined) {
+                temperatureElement.textContent = data.temperature.toFixed(1);
+            }
+            if (data.humidity !== undefined) {
+                humidityElement.textContent = data.humidity.toFixed(1);
+            }
+            if (data.light !== undefined) {
+                lightElement.textContent = data.light;
+            }
+        }
+        
+        function updateActuatorStates(data) {
+            if (data.led !== undefined) {
+                ledSwitch.checked = data.led;
+                ledStatus.textContent = data.led ? 'ON' : 'OFF';
+            }
+            if (data.relay !== undefined) {
+                relaySwitch.checked = data.relay;
+                relayStatus.textContent = data.relay ? 'ON' : 'OFF';
+            }
+            if (data.servo_angle !== undefined) {
+                servoSlider.value = data.servo_angle;
+                servoValue.textContent = data.servo_angle + '°';
+            }
+        }
+        
+        // Controladores de eventos
+        ledSwitch.addEventListener('change', () => {
+            const value = ledSwitch.checked;
+            socket.emit('control_actuator', { type: 'led', value: value });
+            addLog(`💡 LED: ${value ? 'ON' : 'OFF'}`);
+        });
+        
+        relaySwitch.addEventListener('change', () => {
+            const value = relaySwitch.checked;
+            socket.emit('control_actuator', { type: 'relay', value: value });
+            addLog(`🔌 Relay: ${value ? 'ON' : 'OFF'}`);
+        });
+        
+        servoSlider.addEventListener('input', () => {
+            const value = parseInt(servoSlider.value);
+            servoValue.textContent = value + '°';
+        });
+        
+        servoSlider.addEventListener('change', () => {
+            const value = parseInt(servoSlider.value);
+            socket.emit('control_actuator', { type: 'servo_angle', value: value });
+            addLog(`🎯 Servo: ${value}°`);
+        });
+    </script>
+</body>
+</html>
