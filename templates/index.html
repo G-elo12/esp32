@@ -1,31 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ESP32 Monitoring</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenhouse Sensor Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .sensor-box { margin: 10px; padding: 10px; border: 1px solid #ccc; }
+        canvas { max-width: 600px; }
+    </style>
 </head>
 <body>
-    <h1>ESP32 Monitoring</h1>
-    <p>Temperature: <span id="temperature">0</span> °C</p>
-    <p>Humidity: <span id="humidity">0</span> %</p>
-    <p>LED State: <span id="led">OFF</span></p>
-    <button onclick="toggleLED()">Toggle LED</button>
-
-    <script>
-        const socket = io();
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
-        socket.on('sensor_update', (data) => {
-            document.getElementById('temperature').textContent = data.temperature;
-            document.getElementById('humidity').textContent = data.humidity;
-        });
-        socket.on('actuator_update', (data) => {
-            document.getElementById('led').textContent = data.led ? 'ON' : 'OFF';
-        });
-        function toggleLED() {
-            socket.emit('actuator_control', { led: !JSON.parse(document.getElementById('led').textContent === 'ON') });
-        }
-    </script>
+    <h1>Greenhouse Sensor Dashboard</h1>
+    <div class="sensor-box">
+        <h2>Sensor Data</h2>
+        <p>Humidity 1: <span id="humidity1">...</span>%</p>
+        <p>Humidity 2: <span id="humidity2">...</span>%</p>
+        <p>Humidity 3: <span id="humidity3">...</span>%</p>
+        <p>Humidity 4: <span id="humidity4">...</span>%</p>
+        <p>Temperature: <span id="temperature">...</span>°C</p>
+        <p>Last Update: <span id="timestamp">...</span></p>
+    </div>
+    <div>
+        <h2>Humidity Trends</h2>
+        <canvas id="humidityChart"></canvas>
+    </div>
+    <div>
+        <h2>Temperature Trend</h2>
+        <canvas id="temperatureChart"></canvas>
+    </div>
+    <script src="/static/js/index.js"></script>
 </body>
 </html>
